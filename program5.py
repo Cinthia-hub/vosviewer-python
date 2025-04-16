@@ -5,38 +5,53 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import os
 
-# ========== Funciones de lógica ==========
+# Variables globales para los grafos
+G_general = None
+G_keywords = None
+
+# Crear ventana principal
+app = tk.Tk()
+app.title("Visualizador de Redes Bibliométricas")
+app.geometry("700x500")
+
+# Función para cargar el archivo
 def cargar_archivo():
-    filepath = filedialog.askopenfilename(filetypes=[("Archivos CSV o Excel", "*.csv *.xlsx")])
-    if not filepath:
+    file_path = filedialog.askopenfilename(filetypes=[("Archivos CSV o Excel", "*.csv *.xlsx")])
+    if not file_path:
         return
 
-    ext = os.path.splitext(filepath)[-1]
     try:
-        if ext == ".csv":
-            df = pd.read_csv(filepath)
-        elif ext == ".xlsx":
-            df = pd.read_excel(filepath)
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+        elif file_path.endswith('.xlsx'):
+            df = pd.read_excel(file_path, engine='openpyxl')
         else:
-            raise ValueError("Formato no soportado")
+            raise ValueError("Formato no compatible")
     except Exception as e:
         messagebox.showerror("Error al cargar archivo", str(e))
         return
 
+    app.df = df
     columnas = df.columns.tolist()
     combo_source['values'] = columnas
     combo_target['values'] = columnas
     combo_keywords['values'] = columnas
+    messagebox.showinfo("Archivo cargado", f"Archivo cargado con éxito:\n{os.path.basename(file_path)}")
 
-    combo_source.set("")
-    combo_target.set("")
-    combo_keywords.set("")
+# Función para dibujar grafo
+def dibujar_grafo(G, titulo):
+    plt.figure(figsize=(10, 8))
+    pos = nx.spring_layout(G, seed=42)
+    weights = [edata['weight'] for _, _, edata in G.edges(data=True)]
+    nx.draw(G, pos, with_labels=True, node_size=500, node_color="skyblue",
+            edge_color="gray", width=weights, font_size=9)
+    plt.title(titulo)
+    plt.axis("off")
+    plt.show()
 
-    app.df = df
-    label_status.config(text=f"Archivo cargado: {os.path.basename(filepath)} ✅")
-
-
+# Función para crear red general
 def crear_red_general():
+    global G_general
     df = app.df
     source_col = combo_source.get()
     target_col = combo_target.get()
@@ -54,9 +69,12 @@ def crear_red_general():
             else:
                 G.add_edge(s, t, weight=1)
 
+    G_general = G
     dibujar_grafo(G, "Red General")
 
+# Función para crear red de palabras clave
 def crear_red_palabras_clave():
+    global G_keywords
     df = app.df
     kw_col = combo_keywords.get()
 
@@ -76,90 +94,72 @@ def crear_red_palabras_clave():
                     else:
                         G.add_edge(k1, k2, weight=1)
 
+    G_keywords = G
     dibujar_grafo(G, "Red de Palabras Clave")
 
-def dibujar_grafo(G, titulo):
-    plt.figure(figsize=(10, 8))
-    pos = nx.spring_layout(G, seed=42)
-    weights = [edata['weight'] for _, _, edata in G.edges(data=True)]
+# Exportar imagen
+def exportar_imagen(grafo, nombre_por_defecto):
+    if grafo is None:
+        messagebox.showwarning("Red vacía", "Primero genera una red.")
+        return
 
-    nx.draw(G, pos, with_labels=True, node_size=500, node_color="skyblue", edge_color="gray",
-            width=weights, font_size=9)
-    plt.title(titulo)
-    plt.axis("off")
-    plt.tight_layout()
-    plt.show()
-
-def dibujar_grafo(G, titulo):
-    import os
-    from tkinter import filedialog
-
-    # Mostrar el grafo
-    plt.figure(figsize=(10, 8))
-    pos = nx.spring_layout(G, seed=42)
-    weights = [edata['weight'] for _, _, edata in G.edges(data=True)]
-
-    nx.draw(G, pos, with_labels=True, node_size=500, node_color="skyblue", edge_color="gray",
-            width=weights, font_size=9)
-    plt.title(titulo)
-    plt.axis("off")
-    plt.tight_layout()
-    plt.show()
-
-    # Preguntar dónde guardar imagen
     file_img = filedialog.asksaveasfilename(defaultextension=".png",
-                                             filetypes=[("Imagen PNG", "*.png")],
-                                             title="Guardar red como imagen")
+                                            filetypes=[("Imagen PNG", "*.png")],
+                                            title="Guardar red como imagen",
+                                            initialfile=nombre_por_defecto)
     if file_img:
+        plt.figure(figsize=(10, 8))
+        pos = nx.spring_layout(grafo, seed=42)
+        weights = [edata['weight'] for _, _, edata in grafo.edges(data=True)]
+        nx.draw(grafo, pos, with_labels=True, node_size=500, node_color="skyblue",
+                edge_color="gray", width=weights, font_size=9)
+        plt.title(nombre_por_defecto)
+        plt.axis("off")
         plt.savefig(file_img)
-        messagebox.showinfo("Imagen guardada", f"Imagen guardada en:\n{file_img}")
+        plt.close()
+        messagebox.showinfo("Guardado", f"Imagen guardada como {file_img}")
 
-    # Preguntar dónde guardar archivo de red (.gexf para Gephi)
-    file_net = filedialog.asksaveasfilename(defaultextension=".gexf",
-                                            filetypes=[("Archivo GEXF", "*.gexf"), ("GraphML", "*.graphml")],
-                                            title="Guardar red como archivo")
-    if file_net:
-        ext = os.path.splitext(file_net)[-1].lower()
-        if ext == ".gexf":
-            nx.write_gexf(G, file_net)
-        elif ext == ".graphml":
-            nx.write_graphml(G, file_net)
-        else:
-            messagebox.showwarning("Extensión no válida", "Solo se permite .gexf o .graphml")
-            return
-        messagebox.showinfo("Archivo de red guardado", f"Red guardada en:\n{file_net}")
+# Exportar GEXF
+def exportar_gexf(grafo, nombre_por_defecto):
+    if grafo is None:
+        messagebox.showwarning("Red vacía", "Primero genera una red.")
+        return
 
-# ========== Interfaz gráfica ==========
-app = tk.Tk()
-app.title("Visualizador de Redes Bibliométricas")
-app.geometry("500x350")
+    file_gexf = filedialog.asksaveasfilename(defaultextension=".gexf",
+                                             filetypes=[("Archivo GEXF", "*.gexf")],
+                                             title="Guardar red como archivo",
+                                             initialfile=nombre_por_defecto)
+    if file_gexf:
+        nx.write_gexf(grafo, file_gexf)
+        messagebox.showinfo("Guardado", f"Grafo exportado como {file_gexf}")
 
-btn_cargar = tk.Button(app, text="Cargar archivo CSV o Excel", command=cargar_archivo)
-btn_cargar.pack(pady=10)
-
-label_status = tk.Label(app, text="Ningún archivo cargado aún")
-label_status.pack()
-
+# Elementos de la interfaz
 frame_form = tk.Frame(app)
 frame_form.pack(pady=20)
 
-tk.Label(frame_form, text="Columna Origen:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
-tk.Label(frame_form, text="Columna Destino:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
-tk.Label(frame_form, text="Palabras Clave:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+tk.Button(frame_form, text="📂 Cargar archivo CSV/XLSX", command=cargar_archivo).grid(row=0, column=0, columnspan=2, pady=10)
 
-combo_source = tk.ttk.Combobox(frame_form, width=30)
-combo_source.grid(row=0, column=1)
+tk.Label(frame_form, text="Columna origen:").grid(row=1, column=0, sticky="e")
+combo_source = ttk.Combobox(frame_form, width=30)
+combo_source.grid(row=1, column=1)
 
-combo_target = tk.ttk.Combobox(frame_form, width=30)
-combo_target.grid(row=1, column=1)
+tk.Label(frame_form, text="Columna destino:").grid(row=2, column=0, sticky="e")
+combo_target = ttk.Combobox(frame_form, width=30)
+combo_target.grid(row=2, column=1)
 
-combo_keywords = tk.ttk.Combobox(frame_form, width=30)
-combo_keywords.grid(row=2, column=1)
+tk.Label(frame_form, text="Columna palabras clave:").grid(row=3, column=0, sticky="e")
+combo_keywords = ttk.Combobox(frame_form, width=30)
+combo_keywords.grid(row=3, column=1)
 
-btn_red_general = tk.Button(app, text="Mostrar Red General", command=crear_red_general)
-btn_red_general.pack(pady=5)
+tk.Button(app, text="🔗 Crear Red General", command=crear_red_general).pack(pady=5)
+tk.Button(app, text="🔑 Crear Red de Palabras Clave", command=crear_red_palabras_clave).pack(pady=5)
 
-btn_red_keywords = tk.Button(app, text="Mostrar Red de Palabras Clave", command=crear_red_palabras_clave)
-btn_red_keywords.pack(pady=5)
+frame_export = tk.Frame(app)
+frame_export.pack(pady=15)
+
+tk.Button(frame_export, text="📷 Exportar imagen red general", command=lambda: exportar_imagen(G_general, "red_general")).grid(row=0, column=0, padx=5, pady=5)
+tk.Button(frame_export, text="📷 Exportar imagen red palabras clave", command=lambda: exportar_imagen(G_keywords, "red_keywords")).grid(row=0, column=1, padx=5, pady=5)
+tk.Button(frame_export, text="💾 Exportar GEXF red general", command=lambda: exportar_gexf(G_general, "red_general")).grid(row=1, column=0, padx=5, pady=5)
+tk.Button(frame_export, text="💾 Exportar GEXF red palabras clave", command=lambda: exportar_gexf(G_keywords, "red_keywords")).grid(row=1, column=1, padx=5, pady=5)
 
 app.mainloop()
