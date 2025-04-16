@@ -79,6 +79,8 @@ def dibujar_red(G):
     canvas.get_tk_widget().pack(fill="both", expand=True)
     app.canvas_network = canvas
 
+    plt.close(fig)  # Cerrar la figura para liberar memoria
+
 def generar_red_general():
     if not hasattr(app, "df"):
         return
@@ -196,9 +198,11 @@ zoom_slider = tk.Scale(frame_controles, from_=0.5, to=2.5, resolution=0.1, orien
 zoom_slider.set(1.0)
 zoom_slider.pack(pady=(0, 10))
 
+# Función para cerrar la aplicación
 def cerrar_app():
-    app.destroy()  # Esto detiene el loop y cierra la ventana
+    app.quit()  # Esto asegura que el mainloop se detiene correctamente
 
+app.protocol("WM_DELETE_WINDOW", cerrar_app)  # Captura el clic en la 'X' para cerrarlo
 
-app.protocol("WM_DELETE_WINDOW", cerrar_app)
+# Iniciar el mainloop
 app.mainloop()
