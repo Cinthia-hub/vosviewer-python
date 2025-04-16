@@ -4,6 +4,10 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import warnings
+
+# Ignorar warning de openpyxl
+warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 # Funciones
 def cargar_archivo():
@@ -133,6 +137,7 @@ def generar_red_general():
     if source and target:
         G = crear_red_general(app.df, source, target)
         app.grafo_general = G
+        app.grafo_keywords = None  # Limpiar la red de keywords
         dibujar_red(G)
 
 def generar_red_keywords():
@@ -142,6 +147,7 @@ def generar_red_keywords():
     if col:
         G = crear_red_palabras_clave(app.df, col)
         app.grafo_keywords = G
+        app.grafo_general = None  # Limpiar la red general
         dibujar_red(G)
 
 def exportar_png():
