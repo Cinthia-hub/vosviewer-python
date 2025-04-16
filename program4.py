@@ -2,16 +2,28 @@ import streamlit as st
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
-from io import StringIO
+import io
+#import warnings
+
+#warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 st.title("Visualizador de Redes Bibliométricas")
 
-# 1. Cargar archivo CSV
-uploaded_file = st.file_uploader("Sube un archivo CSV", type="csv")
+# 1. Cargar archivo CSV o Excel
+uploaded_file = st.file_uploader("Sube un archivo CSV o Excel", type=["csv", "xlsx"])
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.success("¡Archivo cargado correctamente!")
+    # Detectar tipo de archivo
+    filename = uploaded_file.name
+    if filename.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    elif filename.endswith(".xlsx"):
+        df = pd.read_excel(uploaded_file)
+    else:
+        st.error("Formato de archivo no soportado")
+        st.stop()
+
+    st.success(f"¡Archivo '{filename}' cargado correctamente!")
 
     st.subheader("Vista previa del archivo")
     st.dataframe(df.head())
@@ -58,7 +70,7 @@ if uploaded_file:
         fig, ax = plt.subplots(figsize=(10, 8))
         pos = nx.spring_layout(G, seed=42)
         weights = [edata['weight'] for _, _, edata in G.edges(data=True)]
-        nx.draw(G, pos, with_labels=True, node_size=500, node_color="lightblue", edge_color="gray",
+        nx.draw(G, pos, with_labels=True, node_size=500, node_color="skyblue", edge_color="gray",
                 width=weights, font_size=9, ax=ax)
         st.pyplot(fig)
 
