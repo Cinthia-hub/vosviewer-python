@@ -55,11 +55,26 @@ def crear_red_palabras_clave(df, keywords_col):
 def dibujar_red(G):
     if app.canvas_network:
         app.canvas_network.get_tk_widget().destroy()
+        app.scrollable_canvas.destroy()
 
     zoom = app.zoom_level
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
     pos = nx.spring_layout(G, seed=42, scale=zoom)
+
+    # Obtener límites de posición para dar padding
+    x_vals = [x for x, y in pos.values()]
+    y_vals = [y for x, y in pos.values()]
+    x_min, x_max = min(x_vals), max(x_vals)
+    y_min, y_max = min(y_vals), max(y_vals)
+
+    # Expandimos límites en un 10%
+    x_padding = (x_max - x_min) * 0.15
+    y_padding = (y_max - y_min) * 0.15
+
+    ax.set_xlim(x_min - x_padding, x_max + x_padding)
+    ax.set_ylim(y_min - y_padding, y_max + y_padding)
+
     weights = [edata["weight"] for _, _, edata in G.edges(data=True)]
 
     nx.draw(
@@ -70,16 +85,45 @@ def dibujar_red(G):
         edge_color=weights,
         width=2,
         edge_cmap=plt.cm.Blues,
-        font_size=int(9 * zoom)
+        font_size = int(float(slider_texto.get()) * zoom)
     )
+
     ax.set_title("Red generada", fontsize=14)
+    ax.axis("off")  # Oculta ejes
 
-    canvas = FigureCanvasTkAgg(fig, master=frame_output)
-    canvas.draw()
-    canvas.get_tk_widget().pack(fill="both", expand=True)
-    app.canvas_network = canvas
+    # Contenedor de scroll
+    canvas_frame = tk.Frame(frame_output, bg="white")
+    canvas_frame.pack(fill="both", expand=True)
+    app.scrollable_canvas = canvas_frame
 
-    plt.close(fig)  # Cerrar la figura para liberar memoria
+    h_scrollbar = tk.Scrollbar(canvas_frame, orient="horizontal")
+    h_scrollbar.pack(side="bottom", fill="x")
+
+    v_scrollbar = tk.Scrollbar(canvas_frame, orient="vertical")
+    v_scrollbar.pack(side="right", fill="y")
+
+    canvas_widget = tk.Canvas(canvas_frame, bg="white",
+                              xscrollcommand=h_scrollbar.set,
+                              yscrollcommand=v_scrollbar.set)
+    canvas_widget.pack(side="left", fill="both", expand=True)
+
+    h_scrollbar.config(command=canvas_widget.xview)
+    v_scrollbar.config(command=canvas_widget.yview)
+
+    fig_canvas = FigureCanvasTkAgg(fig, master=canvas_widget)
+    fig_canvas.draw()
+
+    widget = fig_canvas.get_tk_widget()
+    widget.update_idletasks()
+    canvas_widget.create_window((0, 0), window=widget, anchor="nw")
+
+    # Importante: establecer correctamente el tamaño del scroll
+    widget.update_idletasks()
+    canvas_widget.update_idletasks()
+    canvas_widget.config(scrollregion=canvas_widget.bbox("all"))
+
+    app.canvas_network = fig_canvas
+    plt.close(fig)
 
 def generar_red_general():
     if not hasattr(app, "df"):
@@ -186,17 +230,26 @@ tk.Button(frame_controles, text="📁 Exportar GEXF", command=exportar_gexf,
 
 def actualizar_zoom(valor):
     app.zoom_level = float(valor)
-    # Redibuja el grafo actual si existe
+    redibujar_grafo()
+
+tk.Label(frame_controles, text="🔍 Zoom del grafo", **style).pack(pady=(25, 0))
+zoom_slider = tk.Scale(frame_controles, from_=0.1, to=3, resolution=0.1, orient="horizontal",
+                       length=200, command=actualizar_zoom, bg="#f0f4f8")
+zoom_slider.set(1.0)
+zoom_slider.pack(pady=(0, 10))
+
+tk.Label(frame_controles, text="🔠 Tamaño de texto", **style).pack(pady=(10, 0))
+slider_texto = tk.Scale(frame_controles, from_=1, to=20, resolution=1, orient="horizontal",
+                        length=200, bg="#f0f4f8", command=lambda val: redibujar_grafo())
+slider_texto.set(9)
+slider_texto.pack(pady=(0, 10))
+
+
+def redibujar_grafo():
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
         dibujar_red(app.grafo_keywords)
     elif hasattr(app, "grafo_general") and app.grafo_general is not None:
         dibujar_red(app.grafo_general)
-
-tk.Label(frame_controles, text="🔍 Zoom del grafo", **style).pack(pady=(25, 0))
-zoom_slider = tk.Scale(frame_controles, from_=0.5, to=2.5, resolution=0.1, orient="horizontal",
-                       length=200, command=actualizar_zoom, bg="#f0f4f8")
-zoom_slider.set(1.0)
-zoom_slider.pack(pady=(0, 10))
 
 # Función para cerrar la aplicación
 def cerrar_app():
