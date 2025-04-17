@@ -5,6 +5,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import warnings
+import community as community_louvain  # Librería Louvain
 
 # Ignorar warning de openpyxl
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
@@ -241,8 +242,25 @@ def seleccionar_color():
         app.node_color = color
         redibujar_grafo()
 
-tk.Button(frame_controles, text="🎨 Color de Nodos", command=seleccionar_color,
-          font=("Segoe UI", 10), bg="#d4a5ff", fg="black").pack(pady=10)
+tk.Button(frame_controles, text="🎨 Detectar y colorear clústeres",
+          command=lambda: aplicar_clustering_y_dibujar(
+              app.grafo_keywords if app.grafo_keywords else app.grafo_general),
+          font=("Segoe UI", 10), bg="#6a994e", fg="white").pack(pady=10)
+
+label_grosor = tk.Label(frame_controles, text="Grosor de aristas", bg="white")
+label_grosor.pack()
+
+slider_grosor = tk.Scale(
+    frame_controles,
+    from_=0.1,
+    to=5,
+    resolution=0.1,
+    orient="horizontal",
+    length=200,
+    bg="white"
+)
+slider_grosor.set(1.0)
+slider_grosor.pack()
 
 def actualizar_zoom(valor):
     app.zoom_level = float(valor)
@@ -260,7 +278,6 @@ slider_texto = tk.Scale(frame_controles, from_=1, to=20, resolution=1, orient="h
 slider_texto.set(9)
 slider_texto.pack(pady=(0, 10))
 
-
 def redibujar_grafo():
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
         dibujar_red(app.grafo_keywords)
@@ -272,6 +289,76 @@ def cerrar_app():
     app.quit()  # Esto asegura que el mainloop se detiene correctamente
 
 app.protocol("WM_DELETE_WINDOW", cerrar_app)  # Captura el clic en la 'X' para cerrarlo
+
+def aplicar_clustering_y_dibujar(G):
+    if app.canvas_network:
+        app.canvas_network.get_tk_widget().destroy()
+        app.scrollable_canvas.destroy()
+
+    zoom = app.zoom_level
+    fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
+    pos = nx.spring_layout(G, seed=42, scale=zoom)
+
+    # Detectar comunidades
+    partition = community_louvain.best_partition(G)
+    
+    # Colores por comunidad
+    communities = list(set(partition.values()))
+    color_map = plt.cm.get_cmap("tab20", len(communities))
+    node_colors = [color_map(partition[node]) for node in G.nodes()]
+    # Asignar a cada nodo su color
+    node_color_map = {node: color for node, color in zip(G.nodes(), node_colors)}
+
+    # Usar el color del nodo origen para cada arista
+    edge_colors = [node_color_map[u] for u, v in G.edges()]
+
+    grosor = slider_grosor.get()
+    weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
+
+    
+    nx.draw(
+        G, pos, ax=ax,
+        with_labels=True,
+        node_size=500 * zoom,
+        node_color=node_colors,
+        edge_color=edge_colors,  # 👈 importante
+        width=weights,
+        font_size=int(float(slider_texto.get()) * zoom)
+    )
+
+
+    ax.set_title("Red con clústeres detectados", fontsize=14)
+    ax.axis("off")
+
+    # Scroll y canvas como antes
+    canvas_frame = tk.Frame(frame_output, bg="white")
+    canvas_frame.pack(fill="both", expand=True)
+    app.scrollable_canvas = canvas_frame
+
+    h_scrollbar = tk.Scrollbar(canvas_frame, orient="horizontal")
+    h_scrollbar.pack(side="bottom", fill="x")
+
+    v_scrollbar = tk.Scrollbar(canvas_frame, orient="vertical")
+    v_scrollbar.pack(side="right", fill="y")
+
+    canvas_widget = tk.Canvas(canvas_frame, bg="white",
+                              xscrollcommand=h_scrollbar.set,
+                              yscrollcommand=v_scrollbar.set)
+    canvas_widget.pack(side="left", fill="both", expand=True)
+
+    h_scrollbar.config(command=canvas_widget.xview)
+    v_scrollbar.config(command=canvas_widget.yview)
+
+    fig_canvas = FigureCanvasTkAgg(fig, master=canvas_widget)
+    fig_canvas.draw()
+
+    widget = fig_canvas.get_tk_widget()
+    widget.update_idletasks()
+    canvas_widget.create_window((0, 0), window=widget, anchor="nw")
+
+    canvas_widget.config(scrollregion=canvas_widget.bbox("all"))
+    app.canvas_network = fig_canvas
+    plt.close(fig)
 
 # Iniciar el mainloop
 app.mainloop()
