@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk, colorchooser
 import pandas as pd
 import networkx as nx
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import warnings
@@ -139,6 +140,7 @@ def generar_red_general():
         G = crear_red_general(app.df, source, target)
         app.grafo_general = G
         app.grafo_keywords = None  # Limpiar la red de keywords
+        app.red_con_cluster = False
         dibujar_red(G)
 
 def generar_red_keywords():
@@ -149,6 +151,7 @@ def generar_red_keywords():
         G = crear_red_palabras_clave(app.df, col)
         app.grafo_keywords = G
         app.grafo_general = None  # Limpiar la red general
+        app.red_con_cluster = False
         dibujar_red(G)
 
 def exportar_png():
@@ -277,12 +280,19 @@ slider_texto = tk.Scale(frame_controles, from_=1, to=20, resolution=1, orient="h
                         length=200, bg="#f0f4f8", command=lambda val: redibujar_grafo())
 slider_texto.set(9)
 slider_texto.pack(pady=(0, 10))
+slider_grosor.config(command=lambda val: redibujar_grafo())
 
 def redibujar_grafo():
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
-        dibujar_red(app.grafo_keywords)
+        if app.red_con_cluster:
+            aplicar_clustering_y_dibujar(app.grafo_keywords)
+        else:
+            dibujar_red(app.grafo_keywords)
     elif hasattr(app, "grafo_general") and app.grafo_general is not None:
-        dibujar_red(app.grafo_general)
+        if app.red_con_cluster:
+            aplicar_clustering_y_dibujar(app.grafo_general)
+        else:
+            dibujar_red(app.grafo_general)
 
 # Función para cerrar la aplicación
 def cerrar_app():
@@ -304,7 +314,7 @@ def aplicar_clustering_y_dibujar(G):
     
     # Colores por comunidad
     communities = list(set(partition.values()))
-    color_map = plt.cm.get_cmap("tab20", len(communities))
+    color_map = matplotlib.colormaps.get_cmap("tab20").resampled(len(communities))
     node_colors = [color_map(partition[node]) for node in G.nodes()]
     # Asignar a cada nodo su color
     node_color_map = {node: color for node, color in zip(G.nodes(), node_colors)}
@@ -314,7 +324,6 @@ def aplicar_clustering_y_dibujar(G):
 
     grosor = slider_grosor.get()
     weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
-
     
     nx.draw(
         G, pos, ax=ax,
@@ -325,7 +334,6 @@ def aplicar_clustering_y_dibujar(G):
         width=weights,
         font_size=int(float(slider_texto.get()) * zoom)
     )
-
 
     ax.set_title("Red con clústeres detectados", fontsize=14)
     ax.axis("off")
@@ -359,6 +367,7 @@ def aplicar_clustering_y_dibujar(G):
     canvas_widget.config(scrollregion=canvas_widget.bbox("all"))
     app.canvas_network = fig_canvas
     plt.close(fig)
+    app.red_con_cluster = True  # 🟢 Marca que el clustering está activo
 
 # Iniciar el mainloop
 app.mainloop()
