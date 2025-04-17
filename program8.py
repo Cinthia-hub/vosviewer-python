@@ -251,6 +251,13 @@ tk.Button(frame_controles, text="🎨 Detectar y colorear clústeres",
               app.grafo_keywords if app.grafo_keywords else app.grafo_general),
           font=("Segoe UI", 10), bg="#6a994e", fg="white").pack(pady=10)
 
+tk.Label(frame_controles, text="🎨 Esquema de color para clústeres", **style).pack(pady=(10, 0))
+combo_colormap = ttk.Combobox(frame_controles, values=[
+    "tab20", "Set3", "Pastel1", "Accent", "Dark2", "Paired"
+])
+combo_colormap.set("tab20")  # Valor por defecto
+combo_colormap.pack(padx=5, pady=(0, 10))
+
 label_grosor = tk.Label(frame_controles, text="Grosor de aristas", bg="white")
 label_grosor.pack()
 
@@ -315,10 +322,16 @@ def aplicar_clustering_y_dibujar(G):
         app.cluster_partition = community_louvain.best_partition(G)
         app.grafo_clusterizado_actual = G  # Guarda el grafo actual
 
-    partition = app.cluster_partition
+    # Detectar comunidades
+    partition = community_louvain.best_partition(G)
 
+    # Obtener colormap desde el combo
+    selected_cmap_name = combo_colormap.get()
+    cmap = matplotlib.colormaps.get_cmap(selected_cmap_name)
+
+    # Colores por comunidad
     communities = list(set(partition.values()))
-    color_map = matplotlib.colormaps.get_cmap("tab20").resampled(len(communities))
+    color_map = cmap.resampled(len(communities))
     node_colors = [color_map(partition[node]) for node in G.nodes()]
     node_color_map = {node: color for node, color in zip(G.nodes(), node_colors)}
     edge_colors = [node_color_map[u] for u, v in G.edges()]
