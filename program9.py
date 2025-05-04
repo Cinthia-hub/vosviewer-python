@@ -1,10 +1,12 @@
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, colorchooser
 import pandas as pd
 import networkx as nx
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import warnings
+import community as community_louvain  # Librería Louvain
 
 # Ignorar warning de openpyxl
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
@@ -85,9 +87,9 @@ def dibujar_red(G):
         G, pos, ax=ax,
         with_labels=True,
         node_size=500 * zoom,
-        node_color="#90caf9",
-        edge_color="#90caf9",
-        width=2,
+        node_color=app.node_color,
+        edge_color=app.node_color,
+        width=[1 + (w / max(weights)) * 4 for w in weights],
         edge_cmap=plt.cm.Blues,
         font_size = int(float(slider_texto.get()) * zoom)
     )
@@ -138,6 +140,7 @@ def generar_red_general():
         G = crear_red_general(app.df, source, target)
         app.grafo_general = G
         app.grafo_keywords = None  # Limpiar la red de keywords
+        app.red_con_cluster = False
         dibujar_red(G)
 
 def generar_red_keywords():
@@ -148,6 +151,7 @@ def generar_red_keywords():
         G = crear_red_palabras_clave(app.df, col)
         app.grafo_keywords = G
         app.grafo_general = None  # Limpiar la red general
+        app.red_con_cluster = False
         dibujar_red(G)
 
 def exportar_png():
@@ -190,8 +194,10 @@ app.geometry("1200x700")
 app.configure(bg="#e0f7fa")
 app.canvas_network = None
 app.zoom_level = 1.0  # Nivel de zoom inicial
+app.node_color = "#90caf9"
+app.cluster_partition = None
 
-style = {"font": ("Segoe UI", 10), "bg": "#f0f4f8"}
+style = {"font": ("Arial", 10), "bg": "#f0f4f8"}
 
 # Contenedor horizontal
 frame_contenedor_horizontal = tk.Frame(app, bg="#f0f4f8")
@@ -234,28 +240,73 @@ tk.Button(frame_controles, text="💾 Exportar PNG", command=exportar_png,
 tk.Button(frame_controles, text="📁 Exportar GEXF", command=exportar_gexf,
           font=("Segoe UI", 10), bg="#fb8500", fg="black").pack(pady=5)
 
+def seleccionar_color():
+    color = colorchooser.askcolor(title="Seleccionar color de nodos")[1]
+    if color:
+        app.node_color = color
+        redibujar_grafo()
+
+tk.Button(frame_controles, text="🎨 Detectar y colorear clústeres",
+          command=lambda: aplicar_clustering_y_dibujar(
+              app.grafo_keywords if app.grafo_keywords else app.grafo_general),
+          font=("Segoe UI", 10), bg="#6a994e", fg="white").pack(pady=10)
+
+tk.Label(frame_controles, text="🎨 Esquema de color para clústeres", **style).pack(pady=(10, 0))
+combo_colormap = ttk.Combobox(frame_controles, values=[
+    "Set1", "Set2", "Set3", "Pastel1", "Accent", "Dark2", "Paired", "Spectral"
+])
+combo_colormap.set("tab20")  # Valor por defecto
+combo_colormap.pack(padx=5, pady=(0, 10))
+combo_colormap.bind("<<ComboboxSelected>>", lambda event: redibujar_grafo())
+
+# Controles a la derecha del grafo
+frame_controles_derechos = tk.Frame(frame_output, bg="#f0f4f8", width=240)
+frame_controles_derechos.pack(side="right", fill="y", padx=(0, 0), pady=0)
+
+label_grosor = tk.Label(frame_controles_derechos, text="Grosor de aristas", **style)
+label_grosor.pack(pady=(10,10))
+
+slider_grosor = tk.Scale(
+    frame_controles_derechos,
+    from_=0.1,
+    to=5,
+    resolution=0.1,
+    orient="horizontal",
+    length=200,
+    bg="#f0f4f8"
+    #command=lambda val: redibujar_grafo()
+)
+slider_grosor.set(1.0)
+slider_grosor.pack()
+
 def actualizar_zoom(valor):
     app.zoom_level = float(valor)
     redibujar_grafo()
 
-tk.Label(frame_controles, text="🔍 Zoom del grafo", **style).pack(pady=(25, 0))
-zoom_slider = tk.Scale(frame_controles, from_=0.1, to=3, resolution=0.1, orient="horizontal",
+tk.Label(frame_controles_derechos, text="🔍 Zoom del grafo", **style).pack(pady=(25, 10))
+zoom_slider = tk.Scale(frame_controles_derechos, from_=0.1, to=3, resolution=0.1, orient="horizontal",
                        length=200, command=actualizar_zoom, bg="#f0f4f8")
 zoom_slider.set(1.0)
-zoom_slider.pack(pady=(0, 10))
+zoom_slider.pack(pady=(10, 10))
 
-tk.Label(frame_controles, text="🔠 Tamaño de texto", **style).pack(pady=(10, 0))
-slider_texto = tk.Scale(frame_controles, from_=1, to=20, resolution=1, orient="horizontal",
+tk.Label(frame_controles_derechos, text="🔠 Tamaño de texto", **style).pack(pady=(10, 10))
+slider_texto = tk.Scale(frame_controles_derechos, from_=1, to=20, resolution=1, orient="horizontal",
                         length=200, bg="#f0f4f8", command=lambda val: redibujar_grafo())
 slider_texto.set(9)
-slider_texto.pack(pady=(0, 10))
-
+slider_texto.pack(pady=(10, 10))
+slider_grosor.config(command=lambda val: redibujar_grafo())
 
 def redibujar_grafo():
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
-        dibujar_red(app.grafo_keywords)
+        if app.red_con_cluster:
+            aplicar_clustering_y_dibujar(app.grafo_keywords)
+        else:
+            dibujar_red(app.grafo_keywords)
     elif hasattr(app, "grafo_general") and app.grafo_general is not None:
-        dibujar_red(app.grafo_general)
+        if app.red_con_cluster:
+            aplicar_clustering_y_dibujar(app.grafo_general)
+        else:
+            dibujar_red(app.grafo_general)
 
 # Función para cerrar la aplicación
 def cerrar_app():
@@ -263,5 +314,83 @@ def cerrar_app():
 
 app.protocol("WM_DELETE_WINDOW", cerrar_app)  # Captura el clic en la 'X' para cerrarlo
 
+def aplicar_clustering_y_dibujar(G):
+    if app.canvas_network:
+        app.canvas_network.get_tk_widget().destroy()
+        app.scrollable_canvas.destroy()
+
+    zoom = app.zoom_level
+    fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
+    pos = nx.spring_layout(G, seed=42, scale=zoom)
+
+    # Solo calcular la partición si no está guardada
+    if app.cluster_partition is None or app.grafo_clusterizado_actual is not G:
+        app.cluster_partition = community_louvain.best_partition(G)
+        app.grafo_clusterizado_actual = G  # Guarda el grafo actual
+
+    # Detectar comunidades
+    partition = community_louvain.best_partition(G)
+
+    # Obtener colormap desde el combo
+    selected_cmap_name = combo_colormap.get()
+    cmap = matplotlib.colormaps.get_cmap(selected_cmap_name)
+
+    # Colores por comunidad
+    communities = list(set(partition.values()))
+    color_map = cmap.resampled(len(communities))
+    node_colors = [color_map(partition[node]) for node in G.nodes()]
+    node_color_map = {node: color for node, color in zip(G.nodes(), node_colors)}
+    edge_colors = [node_color_map[u] for u, v in G.edges()]
+
+    grosor = slider_grosor.get()
+    weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
+
+    nx.draw(
+        G, pos, ax=ax,
+        with_labels=True,
+        node_size=500 * zoom,
+        node_color=node_colors,
+        edge_color=edge_colors,
+        width=weights,
+        font_size=int(float(slider_texto.get()) * zoom)
+    )
+
+    ax.set_title("Red con clústeres detectados", fontsize=14)
+    ax.axis("off")
+
+    # Scroll y canvas como antes
+    canvas_frame = tk.Frame(frame_output, bg="white")
+    canvas_frame.pack(fill="both", expand=True)
+    app.scrollable_canvas = canvas_frame
+
+    h_scrollbar = tk.Scrollbar(canvas_frame, orient="horizontal")
+    h_scrollbar.pack(side="bottom", fill="x")
+
+    v_scrollbar = tk.Scrollbar(canvas_frame, orient="vertical")
+    v_scrollbar.pack(side="right", fill="y")
+
+    canvas_widget = tk.Canvas(canvas_frame, bg="white",
+                              xscrollcommand=h_scrollbar.set,
+                              yscrollcommand=v_scrollbar.set)
+    canvas_widget.pack(side="left", fill="both", expand=True)
+
+    h_scrollbar.config(command=canvas_widget.xview)
+    v_scrollbar.config(command=canvas_widget.yview)
+
+    fig_canvas = FigureCanvasTkAgg(fig, master=canvas_widget)
+    fig_canvas.draw()
+
+    widget = fig_canvas.get_tk_widget()
+    widget.update_idletasks()
+    canvas_widget.create_window((0, 0), window=widget, anchor="nw")
+
+    canvas_widget.config(scrollregion=canvas_widget.bbox("all"))
+    app.canvas_network = fig_canvas
+    plt.close(fig)
+
+    app.red_con_cluster = True
+
+app.cluster_partition = None
+app.grafo_clusterizado_actual = None
 # Iniciar el mainloop
 app.mainloop()

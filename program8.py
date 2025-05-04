@@ -88,7 +88,7 @@ def dibujar_red(G):
         with_labels=True,
         node_size=500 * zoom,
         node_color=app.node_color,
-        edge_color=weights,
+        edge_color=app.node_color,
         width=[1 + (w / max(weights)) * 4 for w in weights],
         edge_cmap=plt.cm.Blues,
         font_size = int(float(slider_texto.get()) * zoom)
