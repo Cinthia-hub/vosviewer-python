@@ -15,12 +15,12 @@ df = None
 filepath = None
 
 def cargar_archivo():
+    print("Cargar archivo")
     filepath = filedialog.askopenfilename(
         filetypes=[("Archivos CSV", "*.csv"), ("Archivos Excel", "*.xlsx *.xls")]
     )
     if not filepath:
         return
-
     try:
         if filepath.endswith((".xlsx", ".xls")):
             excel_file = pd.ExcelFile(filepath)
@@ -45,12 +45,14 @@ def cargar_archivo():
         messagebox.showerror("Error", f"No se pudo cargar el archivo:\n{e}")
 
 def manejar_cambio_hoja(event=None):
+    print("manejar_cambio_hoja")
     if app.filepath.endswith((".xlsx", ".xls")):  # archivo_excel es un path o workbook abierto
         cargar_columnas_excel()
     else:
         cargar_columnas_desde_df_csv()
 
 def crear_red_general(df, source_col, target_col):
+    print("crear_red_general")
     G = nx.Graph()
     for _, row in df.iterrows():
         source = str(row[source_col])
@@ -62,6 +64,7 @@ def crear_red_general(df, source_col, target_col):
     return G
 
 def crear_red_palabras_clave(df, keywords_col):
+    print("crear_red_palabras_clave")
     G = nx.Graph()
     keywords_unicas = set()
     for _, row in df.iterrows():
@@ -82,6 +85,7 @@ def crear_red_palabras_clave(df, keywords_col):
     return G
 
 def dibujar_red(G):
+    print("dibujar_red")
     if hasattr(app, "canvas_network") and app.canvas_network:
         app.canvas_network.get_tk_widget().destroy()
         app.scrollable_canvas.destroy()
@@ -108,6 +112,7 @@ def dibujar_red(G):
     plt.close(fig)
 
 def cargar_columnas_excel(*args):
+    print("cargar_columnas_excel")
     hoja = combo_hojas.get()
     if not hoja:
         return
@@ -128,6 +133,7 @@ def cargar_columnas_excel(*args):
         messagebox.showerror("Error", f"No se pudo cargar la hoja:\n{e}")
 
 def cargar_columnas_desde_df_csv():
+    print("cargar_columnas_desde_df_csv")
     try:
         fila_ini = int(entry_fila_ini.get()) - 1  # base 1 -> base 0
         col_ini = int(entry_col_ini.get()) - 1    # base 1 -> base 0
@@ -144,6 +150,7 @@ def cargar_columnas_desde_df_csv():
         messagebox.showerror("Error", f"No se pudo procesar CSV:\n{e}")
 
 def cargar_columnas_desde_df():
+    print("cargar_columnas_desde_df")
     columnas = list(app.df.columns)
     combo_source['values'] = columnas
     combo_target['values'] = columnas
@@ -153,6 +160,7 @@ def cargar_columnas_desde_df():
     combo_keywords.set('')
 
 def cargar_columnas_desde_df_columnas_encabezado():
+    print("cargar_columnas_desde_df_columnas_encabezado")
     try:
         col_ini = int(entry_col_ini.get()) - 1
         df = app.df_raw
@@ -169,6 +177,7 @@ def cargar_columnas_desde_df_columnas_encabezado():
         messagebox.showerror("Error", f"No se pudo cargar columnas encabezado columna:\n{e}")
 
 def generar_red_general():
+    print("")
     if not hasattr(app, "df"):
         messagebox.showwarning("Aviso", "Primero carga un archivo válido.")
         return
