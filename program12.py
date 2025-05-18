@@ -12,6 +12,7 @@ import community as community_louvain  # Asegúrate de tener instalado python-lo
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 excel_file = None
 df = None
+filepath = None
 
 def cargar_archivo():
     filepath = filedialog.askopenfilename(
@@ -44,9 +45,9 @@ def cargar_archivo():
         messagebox.showerror("Error", f"No se pudo cargar el archivo:\n{e}")
 
 def manejar_cambio_hoja(event=None):
-    if excel_file:  # archivo_excel es un path o workbook abierto
+    if app.filepath.endswith((".xlsx", ".xls")):  # archivo_excel es un path o workbook abierto
         cargar_columnas_excel()
-    elif df is not None:
+    else:
         cargar_columnas_desde_df_csv()
 
 def crear_red_general(df, source_col, target_col):
@@ -131,8 +132,14 @@ def cargar_columnas_desde_df_csv():
         fila_ini = int(entry_fila_ini.get()) - 1  # base 1 -> base 0
         col_ini = int(entry_col_ini.get()) - 1    # base 1 -> base 0
         df = app.df_raw.iloc[fila_ini:, col_ini:]
-        app.df = pd.DataFrame(df.values)
-        cargar_columnas_desde_df()
+        if app.tipo_encabezado.get() == "Fila":
+            df.columns = df.iloc[0]  # Usa la primera fila como encabezado
+            df = df[1:]  # Elimina la fila de encabezado de los datos
+            app.df = df.reset_index(drop=True)  # Reinicia el índice
+            cargar_columnas_desde_df()
+        else:
+            app.df_raw = df.reset_index(drop=True)
+            cargar_columnas_desde_df_columnas_encabezado()
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo procesar CSV:\n{e}")
 
@@ -147,15 +154,17 @@ def cargar_columnas_desde_df():
 
 def cargar_columnas_desde_df_columnas_encabezado():
     try:
-        # Primer columna ahora es encabezados
-        campos = list(app.df_raw.iloc[:, 0].dropna().astype(str))
+        col_ini = int(entry_col_ini.get()) - 1
+        df = app.df_raw
+        df = df.iloc[:, col_ini:]
+        app.df = df
+        campos = list(df.iloc[:, 0].dropna().astype(str))  # Encabezados en columna
         combo_source['values'] = campos
         combo_target['values'] = campos
         combo_keywords['values'] = campos
         combo_source.set('')
         combo_target.set('')
         combo_keywords.set('')
-        app.df = app.df_raw
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo cargar columnas encabezado columna:\n{e}")
 
@@ -479,7 +488,6 @@ combo_hojas = ttk.Combobox(frame_controles, width=28)
 combo_hojas.pack(padx=5, pady=5)
 combo_hojas.bind("<<ComboboxSelected>>", manejar_cambio_hoja)
 
-
 # Nuevos campos para fila y columna inicial
 frame_filas_cols = tk.Frame(frame_controles, bg="#f0f4f8")
 frame_filas_cols.pack(anchor="w", padx=5, pady=(10,5))
@@ -500,6 +508,16 @@ radio_fila = tk.Radiobutton(frame_controles, text="Fila", variable=app.tipo_enca
 radio_columna = tk.Radiobutton(frame_controles, text="Columna", variable=app.tipo_encabezado, value="Columna", bg="#f0f4f8", command=manejar_cambio_hoja)
 radio_fila.pack(anchor="w", padx=10)
 radio_columna.pack(anchor="w", padx=10)
+
+# Al salir del campo o presionar Enter, se actualiza
+entry_fila_ini.bind("<FocusOut>", manejar_cambio_hoja)
+entry_col_ini.bind("<FocusOut>", manejar_cambio_hoja)
+entry_fila_ini.bind("<Return>", manejar_cambio_hoja)
+entry_col_ini.bind("<Return>", manejar_cambio_hoja)
+
+# También al cambiar el tipo de encabezado (radiobuttons)
+radio_fila.config(command=manejar_cambio_hoja)
+radio_columna.config(command=manejar_cambio_hoja)
 
 tk.Label(frame_controles, text="Columna origen:", font=("Arial", 10), bg="#f0f4f8").pack(anchor="w", padx=5, pady=(15,0))
 combo_source = ttk.Combobox(frame_controles, width=35)
@@ -596,7 +614,7 @@ app.protocol("WM_DELETE_WINDOW", cerrar_app)  # Captura el clic en la 'X' para c
 app.df = None
 app.df_raw = None
 app.hojas = []
-app.filepath = None
+app.filepath = filepath
 app.excel_file = None
 app.canvas_network = None
 app.scrollable_canvas = None
