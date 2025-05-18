@@ -220,7 +220,9 @@ def generar_red_general():
             return
 
     app.grafo_general = G
-    app.red_con_cluster = False  # Para asegurar redibujado
+    app.red_con_cluster = False
+    app.cluster_partition = None
+    app.grafo_clusterizado_actual = None
     dibujar_red(G)
 
 def generar_red_keywords():
@@ -270,8 +272,10 @@ def generar_red_keywords():
         messagebox.showinfo("Info", "Generación de red de keywords para encabezado en columna no implementada aún.")
         return
 
-    app.grafo_keywords = G
+    app.grafo_general = G
     app.red_con_cluster = False
+    app.cluster_partition = None
+    app.grafo_clusterizado_actual = None
     dibujar_red(G)
 
 def exportar_png():
@@ -308,13 +312,13 @@ def exportar_gexf():
         nx.write_gexf(grafo, archivo)
 
 def redibujar_grafo():
-    if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
-        if app.red_con_cluster:
+    if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None and app.grafo_keywords.number_of_nodes() > 0:
+        if app.red_con_cluster and app.grafo_clusterizado_actual == app.grafo_keywords:
             aplicar_clustering_y_dibujar(app.grafo_keywords)
         else:
             dibujar_red(app.grafo_keywords)
-    elif hasattr(app, "grafo_general") and app.grafo_general is not None:
-        if app.red_con_cluster:
+    elif hasattr(app, "grafo_general") and app.grafo_general is not None and app.grafo_general.number_of_nodes() > 0:
+        if app.red_con_cluster and app.grafo_clusterizado_actual == app.grafo_general:
             aplicar_clustering_y_dibujar(app.grafo_general)
         else:
             dibujar_red(app.grafo_general)
@@ -552,9 +556,16 @@ def seleccionar_color():
         redibujar_grafo()
 
 tk.Button(frame_controles, text="🎨 Detectar y colorear clústeres",
-          command=lambda: aplicar_clustering_y_dibujar(
-              app.grafo_keywords if app.grafo_keywords else app.grafo_general),
+          command=lambda: detectar_y_dibujar_clusters(),
           font=("Segoe UI", 10), bg="#6a994e", fg="white").pack(pady=10)
+
+def detectar_y_dibujar_clusters():
+    if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None and len(app.grafo_keywords.nodes) > 0:
+        aplicar_clustering_y_dibujar(app.grafo_keywords)
+    elif hasattr(app, "grafo_general") and app.grafo_general is not None and len(app.grafo_general.nodes) > 0:
+        aplicar_clustering_y_dibujar(app.grafo_general)
+    else:
+        messagebox.showwarning("Aviso", "Primero genera una red para aplicar clústeres.")
 
 tk.Label(frame_controles, text="🎨 Esquema de color para clústeres", **style).pack(pady=(10, 0))
 combo_colormap = ttk.Combobox(frame_controles, values=[
