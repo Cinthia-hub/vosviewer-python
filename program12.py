@@ -86,9 +86,9 @@ def dibujar_red(G):
         app.canvas_network.get_tk_widget().destroy()
         app.scrollable_canvas.destroy()
 
-    fig, ax = plt.subplots(figsize=(8,6))
+    fig, ax = plt.subplots(figsize=(8 * app.zoom_level, 6 * app.zoom_level))
     pos = nx.spring_layout(G, seed=42)
-    nx.draw_networkx(G, pos=pos, ax=ax, with_labels=True, node_size=300, font_size=9)
+    nx.draw_networkx(G, pos=pos, ax=ax, with_labels=True, node_size=300 * app.zoom_level, font_size=int(float(slider_texto.get()) * app.zoom_level))
     ax.axis("off")
 
     canvas_frame = tk.Frame(frame_output, bg="white")
@@ -220,6 +220,7 @@ def generar_red_general():
             return
 
     app.grafo_general = G
+    app.red_con_cluster = False  # Para asegurar redibujado
     dibujar_red(G)
 
 def generar_red_keywords():
@@ -270,6 +271,7 @@ def generar_red_keywords():
         return
 
     app.grafo_keywords = G
+    app.red_con_cluster = False
     dibujar_red(G)
 
 def exportar_png():
@@ -346,7 +348,7 @@ def aplicar_clustering_y_dibujar(G):
     edge_colors = [node_color_map[u] for u, v in G.edges()]
 
     grosor = slider_grosor.get()
-    weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
+    weights = [edata["weight"] * slider_grosor.get() for _, _, edata in G.edges(data=True)]
 
     nx.draw(
         G, pos, ax=ax,
@@ -603,6 +605,8 @@ slider_texto = tk.Scale(frame_controles_derechos, from_=1, to=20, resolution=1, 
 slider_texto.set(9)
 slider_texto.pack(pady=(10, 10))
 slider_grosor.config(command=lambda val: redibujar_grafo())
+zoom_slider.config(command=lambda val: actualizar_zoom(val))
+slider_texto.config(command=lambda val: redibujar_grafo())
 
 # Función para cerrar la aplicación
 def cerrar_app():
