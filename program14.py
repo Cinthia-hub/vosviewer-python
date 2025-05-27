@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, ttk, colorchooser
+from tkinter import filedialog, ttk, messagebox, colorchooser
 import pandas as pd
 import networkx as nx
 import matplotlib
@@ -13,22 +13,37 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 # Funciones
 def cargar_archivo():
-    archivo = filedialog.askopenfilename(filetypes=[("Archivos CSV o Excel", "*.csv *.xlsx")])
-    if archivo:
-        try:
-            if archivo.endswith(".csv"):
-                df = pd.read_csv(archivo)
-            else:
-                df = pd.read_excel(archivo, engine="openpyxl")
+    filepath = filedialog.askopenfilename(
+        filetypes=[("Archivos CSV", "*.csv"), ("Archivos Excel", "*.xlsx *.xls")]
+    )
+    if not filepath:
+        return
 
-            app.df = df
-            columnas = list(df.columns)
-            combo_source["values"] = columnas
-            combo_target["values"] = columnas
-            combo_keywords["values"] = columnas
-            label_estado.config(text=f"✅ Archivo cargado: {archivo.split('/')[-1]}")
-        except Exception as e:
-            label_estado.config(text=f"⚠️ Error: {str(e)}")
+    try:
+        app.filepath = filepath
+        if filepath.endswith((".xlsx", ".xls")):
+            app.excel_file = pd.ExcelFile(filepath)
+            app.hojas = app.excel_file.sheet_names
+            combo_hojas["values"] = app.hojas
+            combo_hojas.set(app.hojas[0])
+            label_estado.config(text=f"✅ Excel cargado: {filepath.split('/')[-1]}")
+            cargar_columnas_excel()
+        else:
+            df = pd.read_csv(filepath, header=None)
+            app.df_raw = df
+            app.hojas = []
+            combo_hojas["values"] = []
+            combo_hojas.set("")
+            label_estado.config(text=f"✅ CSV cargado: {filepath.split('/')[-1]}")
+            cargar_columnas_desde_df_csv()
+    except Exception as e:
+        label_estado.config(text=f"⚠️ Error al cargar: {str(e)}")
+
+def manejar_cambio_hoja(event=None):
+    if app.filepath.endswith((".xlsx", ".xls")):  # archivo_excel es un path o workbook abierto
+        cargar_columnas_excel()
+    else:
+        cargar_columnas_desde_df_csv()
 
 def crear_red_general(df, source_col, target_col):
     G = nx.Graph()
@@ -134,28 +149,178 @@ def dibujar_red(G):
     app.canvas_network = fig_canvas
     plt.close(fig)
 
+def cargar_columnas_excel(*args):
+    hoja = combo_hojas.get()
+    if not hoja:
+        return
+    try:
+        fila_ini = int(entry_fila_ini.get()) - 1  # base 1 -> base 0
+        col_ini = int(entry_col_ini.get()) - 1    # base 1 -> base 0
+        if app.tipo_encabezado.get() == "Fila":
+            df = app.excel_file.parse(hoja, header=fila_ini)
+            df = df.iloc[:, col_ini:]
+            app.df = df
+            cargar_columnas_desde_df()
+        else:
+            df_raw = app.excel_file.parse(hoja, header=None)
+            df_raw = df_raw.iloc[fila_ini:, col_ini:]
+            app.df_raw = df_raw
+            cargar_columnas_desde_df_columnas_encabezado()
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo cargar la hoja:\n{e}")
+
+def cargar_columnas_desde_df_csv():
+    try:
+        fila_ini = int(entry_fila_ini.get()) - 1  # base 1 -> base 0
+        col_ini = int(entry_col_ini.get()) - 1    # base 1 -> base 0
+        df = app.df_raw.iloc[fila_ini:, col_ini:]
+        if app.tipo_encabezado.get() == "Fila":
+            df.columns = df.iloc[0]  # Usa la primera fila como encabezado
+            df = df[1:]  # Elimina la fila de encabezado de los datos
+            app.df = df.reset_index(drop=True)  # Reinicia el índice
+            cargar_columnas_desde_df()
+        else:
+            app.df_raw = df.reset_index(drop=True)
+            cargar_columnas_desde_df_columnas_encabezado()
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo procesar CSV:\n{e}")
+
+def cargar_columnas_desde_df():
+    columnas = list(app.df.columns)
+    combo_source['values'] = columnas
+    combo_target['values'] = columnas
+    combo_keywords['values'] = columnas
+    combo_source.set('')
+    combo_target.set('')
+    combo_keywords.set('')
+
+def cargar_columnas_desde_df_columnas_encabezado():
+    try:
+        col_ini = int(entry_col_ini.get()) - 1
+        df = app.df_raw
+        df = df.iloc[:, col_ini:]
+        app.df = df
+        campos = list(df.iloc[:, 0].dropna().astype(str))  # Encabezados en columna
+        combo_source['values'] = campos
+        combo_target['values'] = campos
+        combo_keywords['values'] = campos
+        combo_source.set('')
+        combo_target.set('')
+        combo_keywords.set('')
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo cargar columnas encabezado columna:\n{e}")
+
 def generar_red_general():
     if not hasattr(app, "df"):
+        messagebox.showwarning("Aviso", "Primero carga un archivo válido.")
         return
-    source = combo_source.get()
-    target = combo_target.get()
-    if source and target:
-        G = crear_red_general(app.df, source, target)
-        app.grafo_general = G
-        app.grafo_keywords = None  # Limpiar la red de keywords
-        app.red_con_cluster = False
-        dibujar_red(G)
+
+    origen = combo_source.get()
+    destino = combo_target.get()
+    if not origen or not destino:
+        messagebox.showwarning("Aviso", "Selecciona columna origen y destino.")
+        return
+
+    G = nx.Graph()
+
+    # Agrega todos los nodos aunque no tengan relaciones
+    if app.tipo_encabezado.get() == "Fila":
+        for _, row in app.df.iterrows():
+            n1 = row[origen]
+            n2 = row[destino]
+            if not pd.isna(n1):
+                G.add_node(n1)
+            if not pd.isna(n2):
+                G.add_node(n2)
+            if pd.isna(n1) or pd.isna(n2):
+                continue
+            if G.has_edge(n1, n2):
+                G[n1][n2]["weight"] += 1
+            else:
+                G.add_edge(n1, n2, weight=1)
+
+    else:
+        df = app.df
+        try:
+            idx_origen = df[df.iloc[:, 0] == origen].index[0]
+            idx_destino = df[df.iloc[:, 0] == destino].index[0]
+            for col_i in df.columns[1:]:
+                n1 = df.at[idx_origen, col_i]
+                n2 = df.at[idx_destino, col_i]
+                if not pd.isna(n1):
+                    G.add_node(n1)
+                if not pd.isna(n2):
+                    G.add_node(n2)
+                if pd.isna(n1) or pd.isna(n2):
+                    continue
+                if G.has_edge(n1, n2):
+                    G[n1][n2]["weight"] += 1
+                else:
+                    G.add_edge(n1, n2, weight=1)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo generar red con encabezado en columna:\n{e}")
+            return
+
+    app.grafo_general = G
+    app.grafo_keywords = None
+    app.red_con_cluster = False
+    app.cluster_partition = None
+    app.grafo_clusterizado_actual = None
+    dibujar_red(G)
 
 def generar_red_keywords():
     if not hasattr(app, "df"):
+        messagebox.showwarning("Aviso", "Primero carga un archivo válido.")
         return
     col = combo_keywords.get()
-    if col:
-        G = crear_red_palabras_clave(app.df, col)
-        app.grafo_keywords = G
-        app.grafo_general = None  # Limpiar la red general
-        app.red_con_cluster = False
-        dibujar_red(G)
+    if not col:
+        messagebox.showwarning("Aviso", "Selecciona la columna de palabras clave.")
+        return
+
+    G = nx.Graph()
+
+    if app.tipo_encabezado.get() == "Fila":
+        for _, row in app.df.iterrows():
+            try:
+                raw_text = str(row[col])
+
+                # Detectar automáticamente el delimitador
+                if ";" in raw_text:
+                    keywords = raw_text.split(";")
+                elif "," in raw_text:
+                    keywords = raw_text.split(",")
+                elif "." in raw_text:
+                    keywords = raw_text.split(".")
+                else:
+                    keywords = [raw_text]  # solo una palabra clave
+
+                # Eliminar espacios al inicio/final y cadenas vacías
+                keywords = [kw.strip() for kw in keywords if kw.strip()]
+                # Eliminar espacios al inicio/final y cadenas vacías
+                keywords = [kw.strip() for kw in keywords if kw.strip()]
+                for kw in keywords:
+                    G.add_node(kw)  # Asegura que se agregue cada keyword como nodo
+
+                for i in range(len(keywords)):
+                    for j in range(i + 1, len(keywords)):
+                        k1, k2 = keywords[i], keywords[j]
+                        if G.has_edge(k1, k2):
+                            G[k1][k2]["weight"] += 1
+                        else:
+                            G.add_edge(k1, k2, weight=1)
+
+            except Exception:
+                continue
+    else:
+        messagebox.showinfo("Info", "Generación de red de keywords para encabezado en columna no implementada aún.")
+        return
+
+    app.grafo_keywords = G
+    app.grafo_general = None  # limpiar red general
+    app.red_con_cluster = False
+    app.cluster_partition = None
+    app.grafo_clusterizado_actual = None
+    dibujar_red(G)
 
 def exportar_png():
     if app.canvas_network:
@@ -290,7 +455,6 @@ def mostrar_filtro_keywords():
     frame_check = tk.Frame(ventana)
     frame_check.pack(fill="both", expand=True)
 
-    # Scrollbars
     canvas = tk.Canvas(frame_check)
     scrollbar_y = tk.Scrollbar(frame_check, orient="vertical", command=canvas.yview)
     scrollable_frame = tk.Frame(canvas)
@@ -342,6 +506,11 @@ def mostrar_filtro_keywords():
 
 # Interfaz
 app = tk.Tk()
+app.filepath = None
+app.excel_file = None
+app.df_raw = None
+app.hojas = []
+app.tipo_encabezado = tk.StringVar(value="Fila")
 app.title("Visualizador de Redes Bibliométricas")
 app.geometry("1200x700")
 app.configure(bg="#e0f7fa")
@@ -364,10 +533,40 @@ frame_output.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
 # Controles
 tk.Button(frame_controles, text="📂 Cargar archivo CSV/XLSX", command=cargar_archivo,
-          font=("Segoe UI", 11, "bold"), bg="#8ecae6", fg="white", padx=10, pady=6).pack(pady=(5, 5))
+          font=("Segoe UI", 11, "bold"), bg="#8ecae6", fg="white", padx=10, pady=6).pack(pady=(5,5))
 
 label_estado = tk.Label(frame_controles, text="", font=("Segoe UI", 10), fg="green", bg="#f0f4f8")
 label_estado.pack()
+
+tk.Label(frame_controles, text="Selecciona hoja (solo Excel):", font=("Arial", 10), bg="#f0f4f8").pack(anchor="w", padx=5, pady=(15,0))
+combo_hojas = ttk.Combobox(frame_controles, width=28)
+combo_hojas.pack(padx=5, pady=5)
+combo_hojas.bind("<<ComboboxSelected>>", manejar_cambio_hoja)
+
+# Campos fila/columna
+frame_filas_cols = tk.Frame(frame_controles, bg="#f0f4f8")
+frame_filas_cols.pack(anchor="w", padx=5, pady=(10,5))
+
+tk.Label(frame_filas_cols, text="Fila inicio (1 base):", bg="#f0f4f8").grid(row=0, column=0, sticky="w")
+entry_fila_ini = tk.Entry(frame_filas_cols, width=6)
+entry_fila_ini.grid(row=0, column=1, padx=5)
+entry_fila_ini.insert(1, "1")
+
+tk.Label(frame_filas_cols, text="Columna inicio (1 base):", bg="#f0f4f8").grid(row=1, column=0, sticky="w")
+entry_col_ini = tk.Entry(frame_filas_cols, width=6)
+entry_col_ini.grid(row=1, column=1, padx=5)
+entry_col_ini.insert(1, "1")
+
+tk.Label(frame_controles, text="¿Los encabezados están en fila o columna?", font=("Arial", 10), bg="#f0f4f8").pack(anchor="w", padx=5, pady=(10,0))
+radio_fila = tk.Radiobutton(frame_controles, text="Fila", variable=app.tipo_encabezado, value="Fila", bg="#f0f4f8", command=manejar_cambio_hoja)
+radio_columna = tk.Radiobutton(frame_controles, text="Columna", variable=app.tipo_encabezado, value="Columna", bg="#f0f4f8", command=manejar_cambio_hoja)
+radio_fila.pack(anchor="w", padx=10)
+radio_columna.pack(anchor="w", padx=10)
+
+entry_fila_ini.bind("<FocusOut>", manejar_cambio_hoja)
+entry_col_ini.bind("<FocusOut>", manejar_cambio_hoja)
+entry_fila_ini.bind("<Return>", manejar_cambio_hoja)
+entry_col_ini.bind("<Return>", manejar_cambio_hoja)
 
 tk.Label(frame_controles, text="Columna origen:", **style).pack(anchor="w", padx=5, pady=(15, 0))
 combo_source = ttk.Combobox(frame_controles, width=35)
