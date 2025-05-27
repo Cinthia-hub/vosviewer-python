@@ -95,7 +95,7 @@ def dibujar_red(G):
     zoom = app.zoom_level
 
     fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
-    pos = nx.spring_layout(G, seed=42, scale=zoom)
+    pos = nx.spring_layout(G, seed=42, k=1, scale=zoom)
 
     # Obtener límites de posición para dar padding
     x_vals = [x for x, y in pos.values()]
@@ -110,17 +110,22 @@ def dibujar_red(G):
     ax.set_xlim(x_min - x_padding, x_max + x_padding)
     ax.set_ylim(y_min - y_padding, y_max + y_padding)
 
-    weights = [edata["weight"] for _, _, edata in G.edges(data=True)]
+    grosor = slider_grosor.get()
+    weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
+
+    # Obtener un solo color del colormap seleccionado
+    selected_cmap_name = combo_colormap.get()
+    cmap = matplotlib.colormaps.get_cmap(selected_cmap_name)
+    flat_color = cmap(0.3)  # Un color constante del mapa
 
     nx.draw(
         G, pos, ax=ax,
         with_labels=True,
         node_size=500 * zoom,
-        node_color=app.node_color,
-        edge_color=app.node_color,
-        width=[1 + (w / max(weights)) * 4 for w in weights],
-        edge_cmap=plt.cm.Blues,
-        font_size = int(float(slider_texto.get()) * zoom)
+        node_color=[flat_color] * len(G.nodes()),
+        edge_color=[flat_color] * len(G.edges()),
+        width=weights,
+        font_size=int(float(slider_texto.get()) * zoom)
     )
 
     ax.set_title("Red generada", fontsize=14)
@@ -351,7 +356,7 @@ def aplicar_clustering_y_dibujar(G):
 
     zoom = app.zoom_level
     fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
-    pos = nx.spring_layout(G, seed=42, scale=zoom)
+    pos = nx.spring_layout(G, seed=42, k=1, scale=zoom)
 
     # Solo calcular la partición si no está guardada
     if app.cluster_partition is None or app.grafo_clusterizado_actual is not G:
