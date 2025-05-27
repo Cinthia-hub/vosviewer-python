@@ -15,12 +15,12 @@ df = None
 filepath = None
 
 def cargar_archivo():
-    print("Cargar archivo")
     filepath = filedialog.askopenfilename(
         filetypes=[("Archivos CSV", "*.csv"), ("Archivos Excel", "*.xlsx *.xls")]
     )
     if not filepath:
         return
+
     try:
         if filepath.endswith((".xlsx", ".xls")):
             excel_file = pd.ExcelFile(filepath)
@@ -45,14 +45,12 @@ def cargar_archivo():
         messagebox.showerror("Error", f"No se pudo cargar el archivo:\n{e}")
 
 def manejar_cambio_hoja(event=None):
-    print("manejar_cambio_hoja")
     if app.filepath.endswith((".xlsx", ".xls")):  # archivo_excel es un path o workbook abierto
         cargar_columnas_excel()
     else:
         cargar_columnas_desde_df_csv()
 
 def crear_red_general(df, source_col, target_col):
-    print("crear_red_general")
     G = nx.Graph()
     for _, row in df.iterrows():
         source = str(row[source_col])
@@ -64,7 +62,6 @@ def crear_red_general(df, source_col, target_col):
     return G
 
 def crear_red_palabras_clave(df, keywords_col):
-    print("crear_red_palabras_clave")
     G = nx.Graph()
     keywords_unicas = set()
     for _, row in df.iterrows():
@@ -85,7 +82,6 @@ def crear_red_palabras_clave(df, keywords_col):
     return G
 
 def dibujar_red(G):
-    print("dibujar_red")
     if hasattr(app, "canvas_network") and app.canvas_network:
         app.canvas_network.get_tk_widget().destroy()
         app.scrollable_canvas.destroy()
@@ -112,7 +108,6 @@ def dibujar_red(G):
     plt.close(fig)
 
 def cargar_columnas_excel(*args):
-    print("cargar_columnas_excel")
     hoja = combo_hojas.get()
     if not hoja:
         return
@@ -133,7 +128,6 @@ def cargar_columnas_excel(*args):
         messagebox.showerror("Error", f"No se pudo cargar la hoja:\n{e}")
 
 def cargar_columnas_desde_df_csv():
-    print("cargar_columnas_desde_df_csv")
     try:
         fila_ini = int(entry_fila_ini.get()) - 1  # base 1 -> base 0
         col_ini = int(entry_col_ini.get()) - 1    # base 1 -> base 0
@@ -150,7 +144,6 @@ def cargar_columnas_desde_df_csv():
         messagebox.showerror("Error", f"No se pudo procesar CSV:\n{e}")
 
 def cargar_columnas_desde_df():
-    print("cargar_columnas_desde_df")
     columnas = list(app.df.columns)
     combo_source['values'] = columnas
     combo_target['values'] = columnas
@@ -160,7 +153,6 @@ def cargar_columnas_desde_df():
     combo_keywords.set('')
 
 def cargar_columnas_desde_df_columnas_encabezado():
-    print("cargar_columnas_desde_df_columnas_encabezado")
     try:
         col_ini = int(entry_col_ini.get()) - 1
         df = app.df_raw
@@ -178,29 +170,118 @@ def cargar_columnas_desde_df_columnas_encabezado():
 
 def generar_red_general():
     if not hasattr(app, "df"):
+        messagebox.showwarning("Aviso", "Primero carga un archivo válido.")
         return
-    source = combo_source.get()
-    target = combo_target.get()
-    if source and target:
-        G = crear_red_general(app.df, source, target)
-        app.grafo_general = G
-        app.grafo_keywords = None  # Limpiar la red de keywords
-        app.red_con_cluster = False
-        dibujar_red(G)  # Llama a dibujar_red para aplicar zoom, grosor y tamaño de texto
+
+    origen = combo_source.get()
+    destino = combo_target.get()
+    if not origen or not destino:
+        messagebox.showwarning("Aviso", "Selecciona columna origen y destino.")
+        return
+
+    G = nx.Graph()
+
+    # Agrega todos los nodos aunque no tengan relaciones
+    if app.tipo_encabezado.get() == "Fila":
+        for _, row in app.df.iterrows():
+            n1 = row[origen]
+            n2 = row[destino]
+            if not pd.isna(n1):
+                G.add_node(n1)
+            if not pd.isna(n2):
+                G.add_node(n2)
+            if pd.isna(n1) or pd.isna(n2):
+                continue
+            if G.has_edge(n1, n2):
+                G[n1][n2]["weight"] += 1
+            else:
+                G.add_edge(n1, n2, weight=1)
+
+    else:
+        df = app.df
+        try:
+            idx_origen = df[df.iloc[:, 0] == origen].index[0]
+            idx_destino = df[df.iloc[:, 0] == destino].index[0]
+            for col_i in df.columns[1:]:
+                n1 = df.at[idx_origen, col_i]
+                n2 = df.at[idx_destino, col_i]
+                if not pd.isna(n1):
+                    G.add_node(n1)
+                if not pd.isna(n2):
+                    G.add_node(n2)
+                if pd.isna(n1) or pd.isna(n2):
+                    continue
+                if G.has_edge(n1, n2):
+                    G[n1][n2]["weight"] += 1
+                else:
+                    G.add_edge(n1, n2, weight=1)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo generar red con encabezado en columna:\n{e}")
+            return
+
+    app.grafo_general = G
+    app.grafo_keywords = None
+    app.red_con_cluster = False
+    app.cluster_partition = None
+    app.grafo_clusterizado_actual = None
+    dibujar_red(G)
 
 def generar_red_keywords():
     if not hasattr(app, "df"):
+        messagebox.showwarning("Aviso", "Primero carga un archivo válido.")
         return
     col = combo_keywords.get()
-    if col:
-        G = crear_red_palabras_clave(app.df, col)
-        app.grafo_keywords = G
-        app.grafo_general = None  # Limpiar la red general
-        app.red_con_cluster = False
-        dibujar_red(G)  # Llama a dibujar_red para aplicar zoom, grosor y tamaño de texto
+    if not col:
+        messagebox.showwarning("Aviso", "Selecciona la columna de palabras clave.")
+        return
+
+    G = nx.Graph()
+
+    if app.tipo_encabezado.get() == "Fila":
+        for _, row in app.df.iterrows():
+            try:
+                raw_text = str(row[col])
+
+                # Detectar automáticamente el delimitador
+                if ";" in raw_text:
+                    keywords = raw_text.split(";")
+                elif "," in raw_text:
+                    keywords = raw_text.split(",")
+                elif "." in raw_text:
+                    keywords = raw_text.split(".")
+                else:
+                    keywords = [raw_text]  # solo una palabra clave
+
+                # Eliminar espacios al inicio/final y cadenas vacías
+                keywords = [kw.strip() for kw in keywords if kw.strip()]
+                # Eliminar espacios al inicio/final y cadenas vacías
+                keywords = [kw.strip() for kw in keywords if kw.strip()]
+                for kw in keywords:
+                    G.add_node(kw)  # Asegura que se agregue cada keyword como nodo
+
+                for i in range(len(keywords)):
+                    for j in range(i + 1, len(keywords)):
+                        k1, k2 = keywords[i], keywords[j]
+                        if G.has_edge(k1, k2):
+                            G[k1][k2]["weight"] += 1
+                        else:
+                            G.add_edge(k1, k2, weight=1)
+
+            except Exception:
+                continue
+    else:
+        messagebox.showinfo("Info", "Generación de red de keywords para encabezado en columna no implementada aún.")
+        return
+
+    app.grafo_keywords = G
+    app.grafo_general = None  # limpiar red general
+    app.red_con_cluster = False
+    app.cluster_partition = None
+    app.grafo_clusterizado_actual = None
+    dibujar_red(G)
+
 
 def exportar_png():
-    print("exportar_png")
     if app.canvas_network:
         if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
             default_name = "red_keywords.png"
@@ -216,7 +297,6 @@ def exportar_png():
             app.canvas_network.figure.savefig(archivo)
 
 def exportar_gexf():
-    print("exportar_gexf")
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None:
         default_name = "red_keywords.gexf"
         grafo = app.grafo_keywords
@@ -235,7 +315,6 @@ def exportar_gexf():
         nx.write_gexf(grafo, archivo)
 
 def redibujar_grafo():
-    print("redibujar_grafo")
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None and app.grafo_keywords.number_of_nodes() > 0:
         if app.red_con_cluster and app.grafo_clusterizado_actual == app.grafo_keywords:
             aplicar_clustering_y_dibujar(app.grafo_keywords)
@@ -248,7 +327,6 @@ def redibujar_grafo():
             dibujar_red(app.grafo_general)
 
 def aplicar_clustering_y_dibujar(G):
-    print("aplicar_clustering_y_dibujar")
     if app.canvas_network:
         app.canvas_network.get_tk_widget().destroy()
         app.scrollable_canvas.destroy()
@@ -325,7 +403,6 @@ def aplicar_clustering_y_dibujar(G):
     app.red_con_cluster = True
 
 def mostrar_filtro_keywords():
-    print("mostrar_filtro_keywords")
     if not hasattr(app, "lista_keywords"):
         return
 
@@ -510,7 +587,6 @@ tk.Button(frame_controles, text="🎨 Detectar y colorear clústeres",
           font=("Segoe UI", 10), bg="#6a994e", fg="white").pack(pady=10)
 
 def detectar_y_dibujar_clusters():
-    print("detectar_y_dibujar_clusters")
     if hasattr(app, "grafo_keywords") and app.grafo_keywords is not None and len(app.grafo_keywords.nodes) > 0:
         aplicar_clustering_y_dibujar(app.grafo_keywords)
     elif hasattr(app, "grafo_general") and app.grafo_general is not None and len(app.grafo_general.nodes) > 0:
@@ -552,7 +628,6 @@ slider_grosor.set(1.0)
 slider_grosor.pack()
 
 def actualizar_zoom(valor):
-    print("actualizar_zoom")
     app.zoom_level = float(valor)
     redibujar_grafo()
 
@@ -589,4 +664,3 @@ app.cluster_partition = None
 app.grafo_clusterizado_actual = None
 
 app.mainloop()
-#dibujar red
