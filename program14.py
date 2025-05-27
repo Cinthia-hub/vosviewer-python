@@ -61,9 +61,19 @@ def crear_red_palabras_clave(df, keywords_col):
     keywords_unicas = set()
     for _, row in df.iterrows():
         try:
-            keywords = str(row[keywords_col]).split(";")
+            raw_text = str(row[keywords_col])
+            if ";" in raw_text:
+                keywords = raw_text.split(";")
+            elif "," in raw_text:
+                keywords = raw_text.split(",")
+            elif "." in raw_text:
+                keywords = raw_text.split(".")
+            else:
+                keywords = [raw_text]
+
             keywords = [k.strip() for k in keywords if k.strip()]
             keywords_unicas.update(keywords)
+
             for i in range(len(keywords)):
                 for j in range(i + 1, len(keywords)):
                     k1, k2 = keywords[i], keywords[j]
@@ -73,7 +83,8 @@ def crear_red_palabras_clave(df, keywords_col):
                         G.add_edge(k1, k2, weight=1)
         except:
             continue
-    app.lista_keywords = sorted(keywords_unicas)  # Guardamos las únicas
+
+    app.lista_keywords = sorted(keywords_unicas)
     return G
 
 def dibujar_red(G):
@@ -277,50 +288,16 @@ def generar_red_keywords():
         messagebox.showwarning("Aviso", "Selecciona la columna de palabras clave.")
         return
 
-    G = nx.Graph()
-
     if app.tipo_encabezado.get() == "Fila":
-        for _, row in app.df.iterrows():
-            try:
-                raw_text = str(row[col])
-
-                # Detectar automáticamente el delimitador
-                if ";" in raw_text:
-                    keywords = raw_text.split(";")
-                elif "," in raw_text:
-                    keywords = raw_text.split(",")
-                elif "." in raw_text:
-                    keywords = raw_text.split(".")
-                else:
-                    keywords = [raw_text]  # solo una palabra clave
-
-                # Eliminar espacios al inicio/final y cadenas vacías
-                keywords = [kw.strip() for kw in keywords if kw.strip()]
-                # Eliminar espacios al inicio/final y cadenas vacías
-                keywords = [kw.strip() for kw in keywords if kw.strip()]
-                for kw in keywords:
-                    G.add_node(kw)  # Asegura que se agregue cada keyword como nodo
-
-                for i in range(len(keywords)):
-                    for j in range(i + 1, len(keywords)):
-                        k1, k2 = keywords[i], keywords[j]
-                        if G.has_edge(k1, k2):
-                            G[k1][k2]["weight"] += 1
-                        else:
-                            G.add_edge(k1, k2, weight=1)
-
-            except Exception:
-                continue
+        G = crear_red_palabras_clave(app.df, col)
+        app.grafo_keywords = G
+        app.grafo_general = None  # Limpiar red general
+        app.red_con_cluster = False
+        app.cluster_partition = None
+        app.grafo_clusterizado_actual = None
+        dibujar_red(G)
     else:
         messagebox.showinfo("Info", "Generación de red de keywords para encabezado en columna no implementada aún.")
-        return
-
-    app.grafo_keywords = G
-    app.grafo_general = None  # limpiar red general
-    app.red_con_cluster = False
-    app.cluster_partition = None
-    app.grafo_clusterizado_actual = None
-    dibujar_red(G)
 
 def exportar_png():
     if app.canvas_network:
