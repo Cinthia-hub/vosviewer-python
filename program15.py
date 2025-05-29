@@ -93,44 +93,29 @@ def dibujar_red(G):
         app.scrollable_canvas.destroy()
 
     zoom = app.zoom_level
-
     fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
-    pos = nx.spring_layout(G, seed=42, k=1, scale=zoom)
+    pos = nx.spring_layout(G, seed=42, k=1.5, scale=zoom)
 
-    # Obtener límites de posición para dar padding
-    x_vals = [x for x, y in pos.values()]
-    y_vals = [y for x, y in pos.values()]
-    x_min, x_max = min(x_vals), max(x_vals)
-    y_min, y_max = min(y_vals), max(y_vals)
+    # Tamaño proporcional adaptativo
+    raw_sizes = [G.degree(n, weight="weight") for n in G.nodes()]
+    min_val = min(raw_sizes) if raw_sizes else 1
+    max_val = max(raw_sizes) if raw_sizes else 1
+    num_nodos = len(G.nodes())
+    escala_global = max(1, 8000 / (num_nodos + 10)) * zoom
 
-    # Expandimos límites en un 10%
-    x_padding = (x_max - x_min) * 0.15
-    y_padding = (y_max - y_min) * 0.15
+    node_sizes = [
+        escala_global * (0.2 + 0.8 * ((val - min_val) / (max_val - min_val) if max_val > min_val else 0.5))
+        for val in raw_sizes
+    ]
 
-    ax.set_xlim(x_min - x_padding, x_max + x_padding)
-    ax.set_ylim(y_min - y_padding, y_max + y_padding)
-
+    # Grosor de aristas
     grosor = slider_grosor.get()
-    weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
+    weights = [0.05 + (edata["weight"] - 1) * 0.005 * grosor for _, _, edata in G.edges(data=True)]
 
-    # Obtener un solo color del colormap seleccionado
+    # Color plano desde colormap
     selected_cmap_name = combo_colormap.get()
     cmap = matplotlib.colormaps.get_cmap(selected_cmap_name)
-    flat_color = cmap(0.3)  # Un color constante del mapa
-
-    # Calcular tamaño de nodos basado en su grado (cantidad de conexiones)
-    raw_sizes = [G.degree(n, weight="weight") for n in G.nodes()]
-    min_size = 200  # tamaño mínimo
-    max_size = 1500  # tamaño máximo
-    if raw_sizes:
-        max_val = max(raw_sizes)
-        min_val = min(raw_sizes)
-        node_sizes = [
-            min_size + (max_size - min_size) * ((val - min_val) / (max_val - min_val) if max_val > min_val else 0)
-            for val in raw_sizes
-        ]
-    else:
-        node_sizes = [500 for _ in G.nodes()]
+    flat_color = cmap(0.3)
 
     nx.draw(
         G, pos, ax=ax,
@@ -143,9 +128,8 @@ def dibujar_red(G):
     )
 
     ax.set_title("Red generada", fontsize=14)
-    ax.axis("off")  # Oculta ejes
+    ax.axis("off")
 
-    # Contenedor de scroll
     canvas_frame = tk.Frame(frame_output, bg="white")
     canvas_frame.pack(fill="both", expand=True)
     app.scrollable_canvas = canvas_frame
@@ -166,14 +150,9 @@ def dibujar_red(G):
 
     fig_canvas = FigureCanvasTkAgg(fig, master=canvas_widget)
     fig_canvas.draw()
-
     widget = fig_canvas.get_tk_widget()
     widget.update_idletasks()
     canvas_widget.create_window((0, 0), window=widget, anchor="nw")
-
-    # Importante: establecer correctamente el tamaño del scroll
-    widget.update_idletasks()
-    canvas_widget.update_idletasks()
     canvas_widget.config(scrollregion=canvas_widget.bbox("all"))
 
     app.canvas_network = fig_canvas
@@ -370,43 +349,39 @@ def aplicar_clustering_y_dibujar(G):
 
     zoom = app.zoom_level
     fig, ax = plt.subplots(figsize=(8 * zoom, 6 * zoom))
-    pos = nx.spring_layout(G, seed=42, k=1, scale=zoom)
+    pos = nx.spring_layout(G, seed=42, k=1.5, scale=zoom)
 
-    # Solo calcular la partición si no está guardada
+    # Calcular clustering solo si es nuevo
     if app.cluster_partition is None or app.grafo_clusterizado_actual is not G:
         app.cluster_partition = community_louvain.best_partition(G)
-        app.grafo_clusterizado_actual = G  # Guarda el grafo actual
+        app.grafo_clusterizado_actual = G
 
-    # Detectar comunidades
-    partition = community_louvain.best_partition(G)
-
-    # Obtener colormap desde el combo
-    selected_cmap_name = combo_colormap.get()
-    cmap = matplotlib.colormaps.get_cmap(selected_cmap_name)
+    partition = app.cluster_partition
 
     # Colores por comunidad
+    selected_cmap_name = combo_colormap.get()
+    cmap = matplotlib.colormaps.get_cmap(selected_cmap_name)
     communities = list(set(partition.values()))
     color_map = cmap.resampled(len(communities))
     node_colors = [color_map(partition[node]) for node in G.nodes()]
     node_color_map = {node: color for node, color in zip(G.nodes(), node_colors)}
     edge_colors = [node_color_map[u] for u, v in G.edges()]
 
-    grosor = slider_grosor.get()
-    weights = [edata["weight"] * grosor for _, _, edata in G.edges(data=True)]
-
-    # Calcular tamaño de nodos basado en su grado (cantidad de conexiones)
+    # Tamaño proporcional adaptativo
     raw_sizes = [G.degree(n, weight="weight") for n in G.nodes()]
-    min_size = 200  # tamaño mínimo
-    max_size = 1500  # tamaño máximo
-    if raw_sizes:
-        max_val = max(raw_sizes)
-        min_val = min(raw_sizes)
-        node_sizes = [
-            min_size + (max_size - min_size) * ((val - min_val) / (max_val - min_val) if max_val > min_val else 0)
-            for val in raw_sizes
-        ]
-    else:
-        node_sizes = [500 for _ in G.nodes()]
+    min_val = min(raw_sizes) if raw_sizes else 1
+    max_val = max(raw_sizes) if raw_sizes else 1
+    num_nodos = len(G.nodes())
+    escala_global = max(1, 8000 / (num_nodos + 10)) * zoom
+
+    node_sizes = [
+        escala_global * (0.2 + 0.8 * ((val - min_val) / (max_val - min_val) if max_val > min_val else 0.5))
+        for val in raw_sizes
+    ]
+
+    # Grosor de aristas
+    grosor = slider_grosor.get()
+    weights = [0.05 + (edata["weight"] - 1) * 0.005 * grosor for _, _, edata in G.edges(data=True)]
 
     nx.draw(
         G, pos, ax=ax,
@@ -421,7 +396,6 @@ def aplicar_clustering_y_dibujar(G):
     ax.set_title("Red con clústeres detectados", fontsize=14)
     ax.axis("off")
 
-    # Scroll y canvas como antes
     canvas_frame = tk.Frame(frame_output, bg="white")
     canvas_frame.pack(fill="both", expand=True)
     app.scrollable_canvas = canvas_frame
@@ -442,15 +416,13 @@ def aplicar_clustering_y_dibujar(G):
 
     fig_canvas = FigureCanvasTkAgg(fig, master=canvas_widget)
     fig_canvas.draw()
-
     widget = fig_canvas.get_tk_widget()
     widget.update_idletasks()
     canvas_widget.create_window((0, 0), window=widget, anchor="nw")
-
     canvas_widget.config(scrollregion=canvas_widget.bbox("all"))
+
     app.canvas_network = fig_canvas
     plt.close(fig)
-
     app.red_con_cluster = True
 
 def mostrar_filtro_keywords():
