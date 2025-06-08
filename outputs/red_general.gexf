@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2025-06-07">
+    <creator>NetworkX 3.4.2</creator>
+  </meta>
+  <graph defaultedgetype="undirected" mode="static" name="">
+    <nodes>
+      <node id="Avances en IA" label="Avances en IA" />
+      <node id="Juan Pérez" label="Juan Pérez" />
+      <node id="Técnicas modernas de aprendizaje" label="Técnicas modernas de aprendizaje" />
+      <node id="María López" label="María López" />
+      <node id="El futuro del big data" label="El futuro del big data" />
+      <node id="Carlos García" label="Carlos García" />
+      <node id="Redes neuronales profundas" label="Redes neuronales profundas" />
+      <node id="Ana Torres" label="Ana Torres" />
+      <node id="Lenguaje natural y máquinas" label="Lenguaje natural y máquinas" />
+      <node id="Luis Fernández" label="Luis Fernández" />
+      <node id="Extracción inteligente de datos" label="Extracción inteligente de datos" />
+      <node id="Elena Ruiz" label="Elena Ruiz" />
+      <node id="Visión artificial aplicada" label="Visión artificial aplicada" />
+      <node id="Miguel Sánchez" label="Miguel Sánchez" />
+      <node id="Algoritmos evolutivos" label="Algoritmos evolutivos" />
+      <node id="Laura Gómez" label="Laura Gómez" />
+      <node id="Profundizando en deep learning" label="Profundizando en deep learning" />
+      <node id="David Martín" label="David Martín" />
+      <node id="Machine learning para todos" label="Machine learning para todos" />
+      <node id="Carmen Díaz" label="Carmen Díaz" />
+      <node id="Comprendiendo la IA explicable" label="Comprendiendo la IA explicable" />
+      <node id="Andrés Romero" label="Andrés Romero" />
+      <node id="Robots y automatización" label="Robots y automatización" />
+      <node id="Patricia Navarro" label="Patricia Navarro" />
+      <node id="Sistemas expertos modernos" label="Sistemas expertos modernos" />
+      <node id="Jorge Castillo" label="Jorge Castillo" />
+      <node id="Predicción con datos" label="Predicción con datos" />
+      <node id="Isabel Herrera" label="Isabel Herrera" />
+      <node id="Automatización inteligente" label="Automatización inteligente" />
+      <node id="Sofía Morales" label="Sofía Morales" />
+    </nodes>
+    <edges>
+      <edge source="Avances en IA" target="Juan Pérez" id="0" weight="1" />
+      <edge source="Técnicas modernas de aprendizaje" target="María López" id="1" weight="1" />
+      <edge source="El futuro del big data" target="Carlos García" id="2" weight="1" />
+      <edge source="Redes neuronales profundas" target="Ana Torres" id="3" weight="1" />
+      <edge source="Lenguaje natural y máquinas" target="Luis Fernández" id="4" weight="1" />
+      <edge source="Extracción inteligente de datos" target="Elena Ruiz" id="5" weight="1" />
+      <edge source="Visión artificial aplicada" target="Miguel Sánchez" id="6" weight="1" />
+      <edge source="Algoritmos evolutivos" target="Laura Gómez" id="7" weight="1" />
+      <edge source="Profundizando en deep learning" target="David Martín" id="8" weight="1" />
+      <edge source="Machine learning para todos" target="Carmen Díaz" id="9" weight="1" />
+      <edge source="Comprendiendo la IA explicable" target="Andrés Romero" id="10" weight="1" />
+      <edge source="Robots y automatización" target="Patricia Navarro" id="11" weight="1" />
+      <edge source="Sistemas expertos modernos" target="Jorge Castillo" id="12" weight="1" />
+      <edge source="Predicción con datos" target="Isabel Herrera" id="13" weight="1" />
+      <edge source="Automatización inteligente" target="Sofía Morales" id="14" weight="1" />
+    </edges>
+  </graph>
+</gexf>
